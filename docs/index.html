@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Memebot Curator</title>
+  <link rel="stylesheet" href="styles.css" />
+  <meta name="description" content="Memebot lets creators review Pinterest recommendations and save the best pins to their own board." />
+</head>
+<body>
+  <section class="hero">
+    <h1>Memebot Curator</h1>
+    <p class="lead">Review Pinterest recommendations, pick the gems, and save them to your board in one click.</p>
+    <p>
+      <a class="cta" href="https://t.me/foddersmemes" target="_blank" rel="noreferrer">Join Telegram pilot →</a>
+    </p>
+  </section>
+
+  <div class="container">
+    <article class="card">
+      <h2>Why it exists</h2>
+      <p>Creators spend hours skimming Pinterest suggestions. Memebot Curator keeps the flow simple: authenticate via OAuth, browse a curated feed via the official API, and manually save the pins that match your audience.</p>
+      <ul>
+        <li>OAuth Authorization Code flow with user consent</li>
+        <li>Recommendations fetched via <code>GET /v5/search/pins</code></li>
+        <li>Manual “Save to board” action via <code>POST /v5/pins</code></li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>How it works</h2>
+      <ol>
+        <li>Click “Connect Pinterest” — OAuth popup appears.</li>
+        <li>Memebot lists your boards (<code>GET /v5/boards</code>) and pulls recommendations for the topic you selected.</li>
+        <li>You review each pin, optionally edit the caption, then press “Save to board”.</li>
+        <li>We confirm the save and let you jump straight to your Pinterest board.</li>
+      </ol>
+    </article>
+
+    <article class="card">
+      <h2>Data & security</h2>
+      <ul>
+        <li>We store only the Pinterest access token, encrypted at rest.</li>
+        <li>No scraping, no silent background posting, no sale of data.</li>
+        <li>Revoke access anytime from Pinterest settings or email <a href="mailto:support@foddersi.dev">support@foddersi.dev</a>.</li>
+      </ul>
+      <p><a href="privacy.html">Read the full Privacy Policy →</a></p>
+    </article>
+
+    <article class="card">
+      <h2>Need access?</h2>
+      <p>Memebot Curator is currently in closed trial. Drop us a line if you want to test the Pinterest workflow or embed it into your creator stack.</p>
+      <ul>
+        <li>Email: <a href="mailto:hello@fodders.dev">hello@fodders.dev</a></li>
+        <li>GitHub: <a href="https://github.com/Fodders-Dev" target="_blank" rel="noreferrer">Fodders-Dev</a></li>
+      </ul>
+    </article>
+  </div>
+
+  <footer>
+    © <span id="year"></span> Fodders. All rights reserved.
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

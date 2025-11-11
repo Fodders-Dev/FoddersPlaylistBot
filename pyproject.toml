@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memebot"
+version = "0.1.0"
+description = "Multi-tenant Telegram bot that autoposts Pinterest recommendations and captures community feedback."
+authors = [{name = "Memebot"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram>=3.4,<4",
+    "aiosqlite>=0.19",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+    "httpx>=0.26",
+    "typer>=0.9",
+    "apscheduler>=3.10",
+    "uvloop>=0.19; platform_system != 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
