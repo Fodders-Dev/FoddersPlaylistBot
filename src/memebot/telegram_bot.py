@@ -129,7 +129,7 @@ class TelegramApp:
         _, post_id_str, vote_str = parts
         post_id = int(post_id_str)
         vote_value = int(vote_str)
-        likes, dislikes, action = await self.voting.register_vote(
+        likes, dislikes, action, inserted = await self.voting.register_vote(
             post_id=post_id,
             user_id=callback.from_user.id,
             vote_value=vote_value,
@@ -140,7 +140,7 @@ class TelegramApp:
             )
         except TelegramBadRequest:
             logger.debug("Cannot update keyboard for post %s", post_id)
-        answer_text = "Учтено"
+        answer_text = "Голос уже учтён" if not inserted else "Учтено"
         if action == "pinned":
             answer_text = "Добавлено в Pinterest"
         elif action == "quarantined":

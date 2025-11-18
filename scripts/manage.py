@@ -32,11 +32,15 @@ def register_channel(
     channel: str = typer.Option(..., help="Telegram channel username or chat id"),
     source: str = typer.Option("pinterest", help="Content source key"),
     query: str | None = typer.Option(None, help="Pinterest search query"),
+    feed_url: str | None = typer.Option(None, help="RSS feed url (for pinterest_rss)"),
+    locale: str | None = typer.Option(None, help="Locale for pinterest_search"),
     board: str | None = typer.Option(None, help="Pinterest board id"),
     section: str | None = typer.Option(None, help="Pinterest section id"),
+    bad_board: str | None = typer.Option(None, help="Board id for disliked pins"),
+    bad_section: str | None = typer.Option(None, help="Section id for disliked pins"),
     like: int = typer.Option(20, help="Like threshold"),
     dislike: int = typer.Option(-10, help="Net score needed for quarantine"),
-    interval: int = typer.Option(900, help="Interval between posting attempts (seconds)"),
+    interval: int = typer.Option(1800, help="Interval between posting attempts (seconds)"),
 ) -> None:
     settings = Settings.load()
 
@@ -47,6 +51,22 @@ def register_channel(
         source_config: dict[str, str | None] = {}
         if source == "pinterest":
             source_config["query"] = query or settings.pinterest_recommendation_query
+        elif source == "pinterest_rss":
+            source_config["feed_url"] = feed_url
+            if query:
+                source_config["query"] = query
+        elif source == "pinterest_search":
+            source_config["query"] = query or settings.pinterest_recommendation_query
+            if locale:
+                source_config["locale"] = locale
+        elif source == "pinterest_board_ideas":
+            if board or settings.pinterest_board_id:
+                source_config["board_id"] = board or settings.pinterest_board_id
+            else:
+                typer.echo("pinterest_board_ideas requires --board or PINTEREST_BOARD_ID in env", err=True)
+                raise typer.Exit(code=1)
+            if locale:
+                source_config["locale"] = locale
         else:
             source_config["query"] = query
         source_config = {k: v for k, v in source_config.items() if v is not None}
@@ -60,6 +80,8 @@ def register_channel(
             dislike_threshold=dislike,
             pinterest_board_id=board or settings.pinterest_board_id,
             pinterest_section_id=section or settings.pinterest_section_id,
+            pinterest_bad_board_id=bad_board or settings.pinterest_bad_board_id,
+            pinterest_bad_section_id=bad_section or settings.pinterest_bad_section_id,
         )
         await db.close()
         typer.echo(f"Channel registered (id={channel_id})")

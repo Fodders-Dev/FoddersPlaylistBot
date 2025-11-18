@@ -1,1 +1,7 @@
 api keys
+.env
+*.egg-info/
+.venv/
+memebot.db
+__pycache__/
+*/__pycache__/

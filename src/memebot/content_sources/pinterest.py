@@ -90,17 +90,27 @@ class PinterestRecommendationsSource:
             pin_id = pin.get("id") or pin.get("pin_id")
             if not pin_id:
                 continue
-            media = (pin.get("media") or {}).get("images") or {}
-            first_image = next(iter(media.values()), None)
-            if not first_image:
+            media_type = "photo"
+            video_url = None
+            media = pin.get("media") or {}
+            images = media.get("images") or {}
+            first_image = next(iter(images.values()), None)
+            if "videos" in media and media["videos"]:
+                video_variant = next(iter(media["videos"].values()))
+                video_url = video_variant.get("url")
+                media_type = "video"
+            if not first_image and not video_url:
                 continue
+            media_url = first_image.get("url") if first_image else video_url
             items.append(
                 ContentItem(
                     source_type=self.name,
                     source_id=str(pin_id),
                     title=pin.get("title") or "Untitled meme",
                     caption=pin.get("description") or pin.get("title"),
-                    media_url=first_image.get("url"),
+                    media_url=media_url,
+                    media_type=media_type,
+                    video_url=video_url,
                     permalink=pin.get("link"),
                     extra={"pin": pin, "board_id": self.board_id, "section_id": self.section_id},
                 )

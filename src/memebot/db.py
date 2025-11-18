@@ -43,6 +43,8 @@ class Database:
                 dislike_threshold INTEGER NOT NULL DEFAULT -10,
                 pinterest_board_id TEXT,
                 pinterest_section_id TEXT,
+                pinterest_bad_board_id TEXT,
+                pinterest_bad_section_id TEXT,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -68,6 +70,7 @@ class Database:
                 posted_at TIMESTAMP,
                 pinned_at TIMESTAMP,
                 quarantine_at TIMESTAMP,
+                audience_size INTEGER,
                 FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE,
                 FOREIGN KEY(content_item_id) REFERENCES content_items(id) ON DELETE CASCADE,
                 UNIQUE(channel_id, content_item_id)
@@ -84,7 +87,17 @@ class Database:
             );
             """
         )
+        await self._maybe_add_column("channels", "pinterest_bad_board_id", "TEXT")
+        await self._maybe_add_column("channels", "pinterest_bad_section_id", "TEXT")
+        await self._maybe_add_column("posts", "audience_size", "INTEGER")
         await self.conn.commit()
+
+    async def _maybe_add_column(self, table: str, column: str, col_type: str) -> None:
+        cursor = await self.conn.execute(f"PRAGMA table_info({table});")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if column in columns:
+            return
+        await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type};")
 
     async def add_channel(
         self,
@@ -97,14 +110,16 @@ class Database:
         dislike_threshold: int = -10,
         pinterest_board_id: str | None = None,
         pinterest_section_id: str | None = None,
+        pinterest_bad_board_id: str | None = None,
+        pinterest_bad_section_id: str | None = None,
     ) -> int:
         cursor = await self.conn.execute(
             """
             INSERT INTO channels (
                 telegram_channel_id, telegram_channel_name, content_source, content_config,
                 autopost_interval, like_threshold, dislike_threshold, pinterest_board_id,
-                pinterest_section_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pinterest_section_id, pinterest_bad_board_id, pinterest_bad_section_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(telegram_channel_id, content_source) DO UPDATE SET
                 content_config=excluded.content_config,
                 autopost_interval=excluded.autopost_interval,
@@ -112,6 +127,8 @@ class Database:
                 dislike_threshold=excluded.dislike_threshold,
                 pinterest_board_id=excluded.pinterest_board_id,
                 pinterest_section_id=excluded.pinterest_section_id,
+                pinterest_bad_board_id=excluded.pinterest_bad_board_id,
+                pinterest_bad_section_id=excluded.pinterest_bad_section_id,
                 updated_at=CURRENT_TIMESTAMP
             RETURNING id;
             """,
@@ -125,6 +142,8 @@ class Database:
                 dislike_threshold,
                 pinterest_board_id,
                 pinterest_section_id,
+                pinterest_bad_board_id,
+                pinterest_bad_section_id,
             ),
         )
         row = await cursor.fetchone()
@@ -180,19 +199,50 @@ class Database:
         await self.conn.commit()
         return int(row[0])
 
+    async def count_pending_posts(self, channel_id: int) -> int:
+        cursor = await self.conn.execute(
+            "SELECT COUNT(1) FROM posts WHERE channel_id=? AND status='pending';",
+            (channel_id,),
+        )
+        row = await cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    async def fetch_pending_posts(self, channel_id: int, limit: int) -> List[aiosqlite.Row]:
+        cursor = await self.conn.execute(
+            """
+            SELECT p.*, ci.source_type, ci.source_id, ci.payload AS content_payload
+            FROM posts p
+            JOIN content_items ci ON ci.id = p.content_item_id
+            WHERE p.channel_id = ? AND p.status='pending'
+            ORDER BY p.id
+            LIMIT ?;
+            """,
+            (channel_id, limit),
+        )
+        return await cursor.fetchall()
+
     async def mark_posted(
         self,
         post_id: int,
         telegram_chat_id: str,
         telegram_message_id: int,
+        audience_size: Optional[int] = None,
     ) -> None:
         await self.conn.execute(
             """
             UPDATE posts
-            SET status='posted', telegram_chat_id=?, telegram_message_id=?, posted_at=CURRENT_TIMESTAMP
+            SET status='posted', telegram_chat_id=?, telegram_message_id=?, posted_at=CURRENT_TIMESTAMP,
+                audience_size=COALESCE(?, audience_size)
             WHERE id=?;
             """,
-            (telegram_chat_id, telegram_message_id, post_id),
+            (telegram_chat_id, telegram_message_id, audience_size, post_id),
+        )
+        await self.conn.commit()
+
+    async def mark_failed(self, post_id: int, status: str = "failed") -> None:
+        await self.conn.execute(
+            "UPDATE posts SET status=? WHERE id=?;",
+            (status, post_id),
         )
         await self.conn.commit()
 
@@ -210,18 +260,19 @@ class Database:
         )
         await self.conn.commit()
 
-    async def record_vote(self, post_id: int, telegram_user_id: str, vote: int) -> None:
-        await self.conn.execute(
-            """
-            INSERT INTO votes (post_id, telegram_user_id, vote)
-            VALUES (?, ?, ?)
-            ON CONFLICT(post_id, telegram_user_id) DO UPDATE SET
-                vote=excluded.vote,
-                updated_at=CURRENT_TIMESTAMP;
-            """,
-            (post_id, telegram_user_id, vote),
-        )
+    async def record_vote_once(self, post_id: int, telegram_user_id: str, vote: int) -> bool:
+        try:
+            await self.conn.execute(
+                """
+                INSERT INTO votes (post_id, telegram_user_id, vote)
+                VALUES (?, ?, ?);
+                """,
+                (post_id, telegram_user_id, vote),
+            )
+        except aiosqlite.IntegrityError:
+            return False
         await self.conn.commit()
+        return True
 
     async def aggregate_votes(self, post_id: int) -> tuple[int, int]:
         cursor = await self.conn.execute(
@@ -242,7 +293,8 @@ class Database:
 
     async def fetch_post(self, post_id: int) -> Optional[aiosqlite.Row]:
         cursor = await self.conn.execute(
-            "SELECT p.*, c.like_threshold, c.dislike_threshold, c.pinterest_board_id, c.pinterest_section_id "
+            "SELECT p.*, c.like_threshold, c.dislike_threshold, c.pinterest_board_id, c.pinterest_section_id, "
+            "c.pinterest_bad_board_id, c.pinterest_bad_section_id "
             "FROM posts p JOIN channels c ON p.channel_id = c.id WHERE p.id=?;",
             (post_id,),
         )

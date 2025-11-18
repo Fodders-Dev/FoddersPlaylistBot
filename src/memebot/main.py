@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from memebot.config import settings
@@ -11,6 +12,7 @@ from memebot.content_sources.pinterest import PinterestClient
 from memebot.content_sources.spotify import SpotifyClient
 from memebot.db import Database
 from memebot.services.autoposter import AutoPoster
+from memebot.services.pinterest_web import PinterestWebClient
 from memebot.services.voting import VotingService
 from memebot.telegram_bot import TelegramApp
 from memebot.utils.logging import configure_logging
@@ -19,7 +21,10 @@ from memebot.utils.logging import configure_logging
 async def app() -> None:
     configure_logging()
     logger = logging.getLogger(__name__)
-    bot = Bot(token=settings.telegram_bot_token, parse_mode=ParseMode.HTML)
+    bot = Bot(
+        token=settings.telegram_bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     db = Database(settings.database_path)
     await db.connect()
     await db.init_schema()
@@ -27,6 +32,13 @@ async def app() -> None:
     pinterest_client = None
     if settings.pinterest_access_token:
         pinterest_client = PinterestClient(settings.pinterest_access_token)
+
+    pinterest_web_client = None
+    if settings.pinterest_cookie:
+        pinterest_web_client = PinterestWebClient(
+            cookie_header=settings.pinterest_cookie,
+            user_agent=settings.pinterest_user_agent,
+        )
 
     spotify_client = None
     if settings.spotify_client_id and settings.spotify_client_secret:
@@ -47,6 +59,7 @@ async def app() -> None:
         db=db,
         bot=bot,
         pinterest_client=pinterest_client,
+        pinterest_web_client=pinterest_web_client,
         quarantine_chat_id=settings.quarantine_chat_id,
     )
     telegram_app = TelegramApp(bot=bot, db=db, settings=settings, autoposter=autoposter, voting=voting)
@@ -62,6 +75,8 @@ async def app() -> None:
             await pinterest_client.close()
         if spotify_client:
             await spotify_client.close()
+        if pinterest_web_client:
+            await pinterest_web_client.close()
         await bot.session.close()
 
 

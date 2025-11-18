@@ -10,6 +10,8 @@ class ContentItem:
     source_id: str
     title: str
     media_url: str
+    media_type: str = "photo"  # photo | video | animation
+    video_url: str | None = None
     permalink: str | None = None
     caption: str | None = None
     extra: Dict[str, Any] = field(default_factory=dict)
